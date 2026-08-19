@@ -1,0 +1,18 @@
+[
+  {
+    "farmer_id": "F001",
+    "name": "Demo Farmer",
+    "mobile": "9000000001",
+    "village": "Demo Village",
+    "land_acres": 2,
+    "urea_eligible_bags": 4
+  },
+  {
+    "farmer_id": "F002",
+    "name": "Test Farmer",
+    "mobile": "9000000002",
+    "village": "Test Village",
+    "land_acres": 3,
+    "urea_eligible_bags": 6
+  }
+]

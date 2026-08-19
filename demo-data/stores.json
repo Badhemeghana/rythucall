@@ -1,0 +1,42 @@
+[
+  {
+    "store_id": "S001",
+    "name": "Demo Village Cooperative Store",
+    "village": "Demo Village",
+    "distance_km": 2.2,
+    "urea_stock": 12,
+    "last_updated_minutes": 5
+  },
+  {
+    "store_id": "S002",
+    "name": "Demo Mandal Fertilizer Store",
+    "village": "Mandal Town",
+    "distance_km": 8.4,
+    "urea_stock": 40,
+    "last_updated_minutes": 8
+  },
+  {
+    "store_id": "S003",
+    "name": "Demo District Fertilizer Store",
+    "village": "District Town",
+    "distance_km": 18.1,
+    "urea_stock": 100,
+    "last_updated_minutes": 3
+  },
+  {
+    "store_id": "S004",
+    "name": "Demo Village Private Outlet",
+    "village": "Demo Village",
+    "distance_km": 3.1,
+    "urea_stock": 0,
+    "last_updated_minutes": 2
+  },
+  {
+    "store_id": "S005",
+    "name": "Demo Nearby Cooperative",
+    "village": "Nearby Village",
+    "distance_km": 5.6,
+    "urea_stock": 6,
+    "last_updated_minutes": 45
+  }
+]

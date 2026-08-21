@@ -38,5 +38,21 @@
     "distance_km": 5.6,
     "urea_stock": 6,
     "last_updated_minutes": 45
+  },
+  {
+    "store_id": "S006",
+    "name": "Test Village Rythu Kendram",
+    "village": "Test Village",
+    "distance_km": 1.8,
+    "urea_stock": 8,
+    "last_updated_minutes": 6
+  },
+  {
+    "store_id": "S007",
+    "name": "Test Village Private Fertilizer Store",
+    "village": "Test Village",
+    "distance_km": 3.4,
+    "urea_stock": 10,
+    "last_updated_minutes": 12
   }
 ]

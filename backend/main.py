@@ -211,6 +211,10 @@ def _active_bookings():
     return [_row_booking(row) for row in rows]
 
 
+def _rank_stores(stores, required_quantity=0):
+    return sorted(stores, key=lambda store: (store["urea_stock"] < required_quantity, store["distance_km"], -store["urea_stock"]))
+
+
 def _village_data(village):
     active_bookings = [booking for booking in _active_bookings() if booking["village"] == village]
     with _connect() as connection:
@@ -220,7 +224,8 @@ def _village_data(village):
     booked_quantity = sum(booking["urea_bags"] for booking in active_bookings)
     demand = {"total_active_bookings": len(active_bookings), "total_booked_urea": booked_quantity, "total_village_stock": total_stock, "current_village_stock": available_stock, "additional_urea_required": max(booked_quantity - total_stock, 0), "supply_status": "VILLAGE SUPPLY REQUIREMENT" if booked_quantity > total_stock else "Stock available"}
     _sync_supply_request(village, demand)
-    return {"stores": [{**store, "store_type": _store_type(store)} for store in stores], "demand": demand}
+    ranked_stores = _rank_stores(stores)
+    return {"stores": [{**store, "store_type": _store_type(store)} for store in ranked_stores], "demand": demand}
 
 
 def _sync_supply_request(village, demand):
@@ -244,8 +249,10 @@ def get_farmer(mobile):
 
 
 @app.get("/village/{village}/stores")
-def get_village_stores(village):
-    return _village_data(village)
+def get_village_stores(village, quantity: int = 0):
+    data = _village_data(village)
+    data["stores"] = [{**store, "can_fulfill": store["urea_stock"] >= quantity} for store in _rank_stores(data["stores"], quantity)]
+    return data
 
 
 @app.get("/notifications/sms/latest")
@@ -336,6 +343,14 @@ def get_booking(booking_id):
     return _booking_response(booking)
 
 
+@app.get("/bookings")
+def get_bookings():
+    with _connect() as connection:
+        _expire_bookings(connection)
+        rows = connection.execute("SELECT * FROM bookings ORDER BY booking_date DESC, booking_id DESC LIMIT 50").fetchall()
+    return [_booking_response(_row_booking(row)) for row in rows]
+
+
 @app.post("/booking/{booking_id}/verify-pickup")
 def verify_booking_pickup(booking_id, request: PickupVerificationRequest):
     booking = _find_booking(booking_id)
@@ -366,8 +381,31 @@ def collect_booking(booking_id):
     return {"collected": True, "booking": _booking_response(_row_booking(collected))}
 
 
+@app.post("/booking/{booking_id}/cancel")
+def cancel_booking(booking_id):
+    with _connect() as connection:
+        _expire_bookings(connection)
+        row = connection.execute("SELECT * FROM bookings WHERE booking_id = ?", (booking_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Booking not found.")
+        if row["status"] == "EXPIRED":
+            raise HTTPException(status_code=409, detail="Booking expired and cannot be cancelled.")
+        if row["status"] == "COLLECTED":
+            raise HTTPException(status_code=409, detail="Collected booking cannot be cancelled.")
+        if row["status"] == "CANCELLED":
+            raise HTTPException(status_code=409, detail="Booking already cancelled.")
+        if row["status"] != "ACTIVE":
+            raise HTTPException(status_code=409, detail=f"Booking with status {row['status']} cannot be cancelled.")
+        if row["reserved"] and row["store_id"]:
+            connection.execute("UPDATE stores SET urea_stock = urea_stock + ? WHERE store_id = ?", (row["reserved_quantity"], row["store_id"]))
+        connection.execute("UPDATE bookings SET status = 'CANCELLED', reserved = 0, reserved_quantity = 0 WHERE booking_id = ?", (booking_id,))
+        cancelled = connection.execute("SELECT * FROM bookings WHERE booking_id = ?", (booking_id,)).fetchone()
+    _village_data(row["village"])
+    return {"cancelled": True, "booking": _booking_response(_row_booking(cancelled))}
+
+
 @app.post("/booking/{mobile}")
-def create_booking(mobile, language: Literal["Telugu", "Hindi", "English"] = "English"):
+def create_booking(mobile, language: Literal["Telugu", "Hindi", "English"] = "English", store_id=None):
     global LATEST_SIMULATED_SMS
     farmer = _find_farmer(mobile)
     if farmer is None:
@@ -376,8 +414,12 @@ def create_booking(mobile, language: Literal["Telugu", "Hindi", "English"] = "En
     urea_bags = farmer["urea_eligible_bags"]
     with _connect() as connection:
         _expire_bookings(connection)
-        stores = [dict(row) for row in connection.execute("SELECT * FROM stores WHERE village = ? ORDER BY distance_km", (village,)).fetchall()]
-        available_store = next((store for store in stores if store["urea_stock"] >= urea_bags), None)
+        stores = [dict(row) for row in connection.execute("SELECT * FROM stores WHERE village = ?", (village,)).fetchall()]
+        ranked_stores = _rank_stores(stores, urea_bags)
+        selected_store = next((store for store in ranked_stores if store["store_id"] == store_id), None) if store_id else None
+        if store_id and (selected_store is None or selected_store["urea_stock"] < urea_bags):
+            raise HTTPException(status_code=409, detail="Selected store cannot fulfill this booking.")
+        available_store = selected_store or next((store for store in ranked_stores if store["urea_stock"] >= urea_bags), None)
         reserved = available_store is not None
         if reserved:
             connection.execute("UPDATE stores SET urea_stock = urea_stock - ? WHERE store_id = ?", (urea_bags, available_store["store_id"]))

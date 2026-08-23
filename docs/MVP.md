@@ -10,7 +10,7 @@
 - [x] Automatic fertilizer eligibility
 - [x] Nearby outlet search
 - [x] Stock availability check
-- [ ] Outlet ranking
+- [x] Outlet ranking
 - [x] Reservation
 - [x] Booking ID
 - [x] SMS simulation
@@ -31,7 +31,7 @@
 - [ ] Outlet ranking
 - [x] Reservation API
 - [x] Stock deduction
-- [ ] Reservation cancellation
+- [x] Reservation cancellation
 - [x] Reservation expiry
 
 ## AI

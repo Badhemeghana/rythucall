@@ -2,51 +2,52 @@
 
 ## Farmer Journey
 
-- [ ] Simulated phone call
-- [ ] Language selection
-- [ ] Farmer authentication
-- [ ] Farmer profile lookup
-- [ ] Automatic land information
-- [ ] Automatic fertilizer eligibility
-- [ ] Nearby outlet search
-- [ ] Stock availability check
+- [x] Simulated phone call
+- [x] Language selection
+- [x] Farmer authentication
+- [x] Farmer profile lookup
+- [x] Automatic land information
+- [x] Automatic fertilizer eligibility
+- [x] Nearby outlet search
+- [x] Stock availability check
 - [ ] Outlet ranking
-- [ ] Reservation
-- [ ] Booking ID
-- [ ] SMS simulation
+- [x] Reservation
+- [x] Booking ID
+- [x] SMS simulation
 
 ## Outlet Journey
 
-- [ ] Enter booking ID
-- [ ] Verify reservation
-- [ ] Display fertilizer quantity
-- [ ] Mark fertilizer as collected
+- [x] Enter booking ID
+- [x] Verify reservation
+- [x] Display fertilizer quantity
+- [x] Mark fertilizer as collected
 
 ## Backend
 
-- [ ] Farmer API
-- [ ] Eligibility API
-- [ ] Outlet API
-- [ ] Inventory logic
+- [x] Farmer API
+- [x] Eligibility API
+- [x] Outlet API
+- [x] Inventory logic
 - [ ] Outlet ranking
-- [ ] Reservation API
-- [ ] Stock deduction
+- [x] Reservation API
+- [x] Stock deduction
 - [ ] Reservation cancellation
-- [ ] Reservation expiry
+- [x] Reservation expiry
 
 ## AI
 
-- [ ] Natural-language request understanding
-- [ ] Telugu support
-- [ ] English support
-- [ ] AI must not make eligibility decisions
-- [ ] AI must not invent inventory
+- [x] Natural-language request understanding
+- [x] Telugu support
+- [x] English support
+- [x] Hindi support
+- [x] AI must not make eligibility decisions
+- [x] AI must not invent inventory
 
 ## Demo
 
-- [ ] Complete journey works
-- [ ] Mobile-friendly
-- [ ] Loading states
-- [ ] Error states
-- [ ] Synthetic data clearly labelled
-- [ ] Prototype disclaimer
+- [x] Complete journey works
+- [x] Mobile-friendly
+- [x] Loading states
+- [x] Error states
+- [x] Synthetic data clearly labelled
+- [x] Prototype disclaimer

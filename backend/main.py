@@ -405,13 +405,15 @@ def cancel_booking(booking_id):
 
 
 @app.post("/booking/{mobile}")
-def create_booking(mobile, language: Literal["Telugu", "Hindi", "English"] = "English", store_id=None):
+def create_booking(mobile, language: Literal["Telugu", "Hindi", "English"] = "English", store_id=None, quantity: int | None = None):
     global LATEST_SIMULATED_SMS
     farmer = _find_farmer(mobile)
     if farmer is None:
         raise HTTPException(status_code=404, detail=f"No farmer found for mobile number {mobile}")
     village = farmer["village"]
-    urea_bags = farmer["urea_eligible_bags"]
+    urea_bags = quantity if quantity is not None else farmer["urea_eligible_bags"]
+    if urea_bags < 1 or urea_bags > farmer["urea_eligible_bags"]:
+        raise HTTPException(status_code=400, detail=f"Choose between 1 and {farmer['urea_eligible_bags']} eligible Urea bags.")
     with _connect() as connection:
         _expire_bookings(connection)
         stores = [dict(row) for row in connection.execute("SELECT * FROM stores WHERE village = ?", (village,)).fetchall()]
@@ -436,3 +438,4 @@ def create_booking(mobile, language: Literal["Telugu", "Hindi", "English"] = "En
         connection.execute("INSERT INTO call_events VALUES (?, ?, ?, ?, ?, ?)", (f"CALL-{uuid4().hex[:8].upper()}", booking["mobile"], language, "VERIFIED", "Booking created", timestamp))
     updated_village_data = _village_data(village)
     return {**booking, "village_stores": updated_village_data["stores"], "village_demand": updated_village_data["demand"]}
+

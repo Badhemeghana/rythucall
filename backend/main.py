@@ -171,6 +171,11 @@ def select_ivr_language(request: IvrLanguageRequest):
     return {"selected_language": IVR_LANGUAGES[request.selection], "next_step": "aadhaar_last_4_verification", "verification_type": "DEMO_LAST_4_DIGITS"}
 
 
+@app.get("/ivr/language")
+def get_ivr_languages():
+    return {"languages": list(IVR_LANGUAGES.values())}
+
+
 @app.post("/ivr/verify")
 def verify_ivr_farmer(request: IvrVerifyRequest):
     if len(request.aadhaar_last4) != 4 or not request.aadhaar_last4.isdigit():

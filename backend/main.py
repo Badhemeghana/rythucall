@@ -227,6 +227,17 @@ def _rank_stores(stores, required_quantity=0):
     return sorted(stores, key=lambda store: (store["urea_stock"] < required_quantity, store["distance_km"], -store["urea_stock"]))
 
 
+def _reserve_pending_bookings(connection, village):
+    pending = connection.execute("SELECT * FROM bookings WHERE village = ? AND status = 'ACTIVE' AND reserved = 0 ORDER BY booking_date, booking_id", (village,)).fetchall()
+    for booking in pending:
+        stores = [dict(row) for row in connection.execute("SELECT * FROM stores WHERE village = ?", (village,)).fetchall()]
+        store = next((item for item in _rank_stores(stores, booking["urea_bags"]) if item["urea_stock"] >= booking["urea_bags"]), None)
+        if store is None:
+            continue
+        connection.execute("UPDATE stores SET urea_stock = urea_stock - ? WHERE store_id = ?", (booking["urea_bags"], store["store_id"]))
+        connection.execute("UPDATE bookings SET store_id = ?, store_name = ?, store_type = ?, distance_km = ?, reserved = 1, reserved_quantity = ? WHERE booking_id = ?", (store["store_id"], store["name"], _store_type(store), store["distance_km"], booking["urea_bags"], booking["booking_id"]))
+
+
 def _village_data(village):
     active_bookings = [booking for booking in _active_bookings() if booking["village"] == village]
     with _connect() as connection:
@@ -234,7 +245,8 @@ def _village_data(village):
     total_stock = sum(store["initial_urea_stock"] for store in stores)
     available_stock = sum(store["urea_stock"] for store in stores)
     booked_quantity = sum(booking["urea_bags"] for booking in active_bookings)
-    demand = {"total_active_bookings": len(active_bookings), "total_booked_urea": booked_quantity, "total_village_stock": total_stock, "current_village_stock": available_stock, "additional_urea_required": max(booked_quantity - total_stock, 0), "supply_status": "VILLAGE SUPPLY REQUIREMENT" if booked_quantity > total_stock else "Stock available"}
+    unreserved_quantity = sum(booking["urea_bags"] for booking in active_bookings if not booking["reserved"])
+    demand = {"total_active_bookings": len(active_bookings), "total_booked_urea": booked_quantity, "total_village_stock": total_stock, "current_village_stock": available_stock, "additional_urea_required": unreserved_quantity, "supply_status": "VILLAGE SUPPLY REQUIREMENT" if unreserved_quantity else "Stock available"}
     _sync_supply_request(village, demand)
     ranked_stores = _rank_stores(stores)
     return {"stores": [{**store, "store_type": _store_type(store)} for store in ranked_stores], "demand": demand}
@@ -246,10 +258,10 @@ def _sync_supply_request(village, demand):
         existing = connection.execute("SELECT * FROM supply_requests WHERE village = ?", (village,)).fetchone()
         required = demand["additional_urea_required"]
         if existing is None and required > 0:
-            connection.execute("INSERT INTO supply_requests VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (f"SUP-{uuid4().hex[:8].upper()}", village, required, demand["current_village_stock"], demand["total_booked_urea"], "SUPPLY REQUIRED", now, now))
+            connection.execute("INSERT INTO supply_requests VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (f"SUP-{uuid4().hex[:8].upper()}", village, required, demand["current_village_stock"], required, "SUPPLY REQUIRED", now, now))
         elif existing is not None:
             status = "STOCK AVAILABLE" if required == 0 else ("SUPPLY REQUIRED" if existing["status"] in ("STOCK AVAILABLE", "SUPPLY RECEIVED") else existing["status"])
-            connection.execute("UPDATE supply_requests SET required_quantity = ?, current_stock = ?, active_booked_quantity = ?, status = ?, updated_date = ? WHERE request_id = ?", (required, demand["current_village_stock"], demand["total_booked_urea"], status, now, existing["request_id"]))
+            connection.execute("UPDATE supply_requests SET required_quantity = ?, current_stock = ?, active_booked_quantity = ?, status = ?, updated_date = ? WHERE request_id = ?", (required, demand["current_village_stock"], required, status, now, existing["request_id"]))
 
 
 @app.get("/farmer/{mobile}")
@@ -324,6 +336,7 @@ def receive_supply(request_id: str, request: SupplyReceiveRequest):
         if store is None:
             raise HTTPException(status_code=404, detail="Village store not found.")
         connection.execute("UPDATE stores SET initial_urea_stock = initial_urea_stock + ?, urea_stock = urea_stock + ? WHERE store_id = ?", (request.quantity, request.quantity, request.store_id))
+        _reserve_pending_bookings(connection, row["village"])
         connection.execute("UPDATE supply_requests SET status = 'SUPPLY RECEIVED', updated_date = ? WHERE request_id = ?", (_today().isoformat(), request_id))
     _village_data(row["village"])
     with _connect() as connection:
@@ -439,9 +452,11 @@ def create_booking(mobile, language: Literal["Telugu", "Hindi", "English"] = "En
             connection.execute("UPDATE stores SET urea_stock = urea_stock - ? WHERE store_id = ?", (urea_bags, available_store["store_id"]))
         booking_date = _today()
         valid_until = booking_date + timedelta(days=2)
-        store = available_store or (stores[0] if stores else {"name": "Village supply point", "store_id": None, "distance_km": None, "store_type": "Village supply point"})
+        store = available_store or {"name": "Supply pending", "store_id": None, "distance_km": None, "store_type": "Supply pending"}
         booking = {"booking_id": f"BOOK-{uuid4().hex[:8].upper()}", "farmer_id": farmer["farmer_id"], "name": farmer["name"], "mobile": farmer["mobile"], "village": village, "urea_bags": urea_bags, "store_id": store.get("store_id"), "store_name": store["name"], "store_village": village, "store_type": store.get("store_type") or _store_type(store), "distance_km": store.get("distance_km"), "pickup_code": uuid4().hex[:6].upper(), "booking_date": booking_date.isoformat(), "valid_until": valid_until.isoformat(), "status": "ACTIVE", "reserved": reserved, "reserved_quantity": urea_bags if reserved else 0, "reserved_allocations": {store["store_id"]: urea_bags} if reserved else {}}
-        booking["simulated_sms"] = "\n".join([f"Kisan Connect: Your Urea booking {booking['booking_id']} is confirmed.", f"Farmer: {booking['name']}", f"Urea: {booking['urea_bags']} bags", f"Village: {booking['village']}", f"Pickup Store: {booking['store_name']}", f"Pickup Code: {booking['pickup_code']}", f"Valid Until: {_display_date(booking['valid_until'])}"])
+        confirmation_status = "BOOKING CONFIRMED" if reserved else "BOOKING CONFIRMED - SUPPLY PENDING"
+        sms_store_line = f"Assigned Store: {booking['store_name']}" if reserved else f"Supply: Being arranged for {booking['village']} village"
+        booking["simulated_sms"] = "\n".join([f"Kisan Connect: {confirmation_status}.", f"Farmer: {booking['name']}", f"Urea: {booking['urea_bags']} bags", f"Village: {booking['village']}", sms_store_line, f"Pickup Code: {booking['pickup_code']}", f"Valid Until: {_display_date(booking['valid_until'])}"])
         connection.execute("INSERT INTO bookings (booking_id, farmer_id, name, mobile, village, urea_bags, store_id, store_name, store_village, store_type, distance_km, pickup_code, booking_date, valid_until, status, reserved, reserved_quantity, simulated_sms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (booking["booking_id"], booking["farmer_id"], booking["name"], booking["mobile"], booking["village"], booking["urea_bags"], booking["store_id"], booking["store_name"], booking["store_village"], booking["store_type"], booking["distance_km"], booking["pickup_code"], booking["booking_date"], booking["valid_until"], booking["status"], int(booking["reserved"]), booking["reserved_quantity"], booking["simulated_sms"]))
     LATEST_SIMULATED_SMS = booking["simulated_sms"]
     with _connect() as connection:

@@ -7,9 +7,21 @@ from typing import Literal
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 app = FastAPI(title="RythuCall API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://kisan-connect-dcu6.onrender.com",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 BASE_DIR = Path(__file__).resolve().parent.parent
 FARMERS_FILE = BASE_DIR / "demo-data" / "farmers.json"
 STORES_FILE = BASE_DIR / "demo-data" / "stores.json"
